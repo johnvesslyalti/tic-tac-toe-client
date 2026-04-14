@@ -1,66 +1,173 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import client from "@/lib/nakama";
+import { GameState, OpCode } from "@/types/game";
+import MatchmakingView from "@/components/MatchmakingView";
+import GameBoard from "@/components/GameBoard";
+import ResultsView from "@/components/ResultsView";
+import { Socket } from "@heroiclabs/nakama-js";
+
+type ViewState = "lobby" | "matchmaking" | "playing" | "results";
 
 export default function Home() {
+  const { session, isLoading, logout } = useAuth();
+  const router = useRouter();
+
+  const [view, setView] = useState<ViewState>("lobby");
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+
+  // Auth Guard
+  useEffect(() => {
+    if (!isLoading && !session) {
+      router.push("/login");
+    }
+  }, [session, isLoading, router]);
+
+  // Socket Cleanup
+  useEffect(() => {
+    return () => {
+      socket?.disconnect(true);
+    };
+  }, [socket]);
+
+  const connectSocket = useCallback(async () => {
+    if (!session) return null;
+    const newSocket = client.createSocket(false, false);
+    await newSocket.connect(session, true);
+    setSocket(newSocket);
+    return newSocket;
+  }, [session]);
+
+  const handleFindMatch = async () => {
+    setView("matchmaking");
+    try {
+      const activeSocket = await connectSocket();
+      if (!activeSocket) throw new Error("Could not connect socket");
+
+      // Set up listeners first
+      activeSocket.onmatchdata = (result) => {
+        const payload = JSON.parse(new TextDecoder().decode(result.data));
+        if (result.op_code === OpCode.UPDATE) {
+          setGameState(payload);
+          if (payload.gameStarted) setView("playing");
+          if (payload.winner) setView("results");
+        }
+      };
+
+      // Create match via RPC
+      const response = await client.rpc(session!, "create_match", {});
+      const { match_id } = response.payload as { match_id: string };
+      
+      // Join match via Socket
+      await activeSocket.joinMatch(match_id);
+      setMatchId(match_id);
+    } catch (err: unknown) {
+      if (err instanceof Response || (err && typeof err === "object" && "status" in err)) {
+        const response = err as Response;
+        try {
+          const errorData = await response.json().catch(() => ({}));
+          console.error(`Matchmaking error (API ${response.status}):`, errorData.message || errorData);
+        } catch {
+          console.error(`Matchmaking error (API ${response.status}):`, response.statusText);
+        }
+      } else {
+        console.error("Matchmaking error:", err);
+      }
+      setView("lobby");
+    }
+  };
+
+  const handleMove = (index: number) => {
+    if (!socket || !matchId) return;
+    const data = JSON.stringify({ index });
+    socket.matchDataSend(matchId, OpCode.MOVE, data);
+  };
+
+  const handleLeave = () => {
+    socket?.disconnect();
+    setSocket(null);
+    setMatchId(null);
+    setGameState(null);
+    setView("lobby");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-teal-game border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 font-sans overflow-hidden">
+      {view === "lobby" && (
+        <div className="relative w-full max-w-md">
+          {/* Background Glow */}
+          <div className="absolute -inset-4 bg-teal-game/20 blur-3xl rounded-full opacity-50 animate-pulse" />
+          
+          <div className="relative bg-dark-surface/80 backdrop-blur-2xl rounded-[2.5rem] p-10 shadow-2xl border border-white/5 text-center space-y-8 animate-in zoom-in-95 slide-in-from-bottom-10 duration-700 ease-out">
+            <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-white mb-2 shadow-[0_20px_50px_rgba(255,255,255,0.15)] transform hover:rotate-6 transition-transform duration-500">
+              <span className="text-5xl font-black text-black italic tracking-tighter">XO</span>
+            </div>
+            
+            <div className="space-y-3">
+              <h1 className="text-5xl font-black tracking-tighter text-white uppercase italic leading-none">
+                Tic Tac Toe
+              </h1>
+              <div className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 rounded-full w-fit mx-auto border border-white/5">
+                <div className="w-2 h-2 rounded-full bg-teal-game animate-pulse" />
+                <p className="text-white/60 text-xs font-bold tracking-widest uppercase">
+                  Logged in as <span className="text-white">{session.username}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-4 pt-6">
+              <button 
+                onClick={handleFindMatch}
+                className="group relative py-6 bg-teal-game hover:bg-teal-game/90 text-white font-black rounded-2xl shadow-[0_15px_40px_rgba(38,184,163,0.3)] transition-all hover:scale-[1.03] active:scale-95 text-lg uppercase tracking-[0.2em] overflow-hidden"
+              >
+                <span className="relative z-10">Find Match</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              </button>
+              
+              <button 
+                onClick={logout}
+                className="py-4 text-white/20 hover:text-red-400 text-[10px] font-black uppercase tracking-[0.3em] transition-all hover:tracking-[0.4em]"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "matchmaking" && <MatchmakingView onCancel={handleLeave} />}
+
+      {view === "playing" && gameState && (
+        <GameBoard 
+          state={gameState} 
+          userId={session.user_id!} 
+          onMove={handleMove} 
+          onLeave={handleLeave} 
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-              style={{ height: "auto" }}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      {view === "results" && gameState && (
+        <ResultsView 
+          state={gameState} 
+          userId={session.user_id!} 
+          onPlayAgain={handleLeave} 
+        />
+      )}
     </div>
   );
 }
