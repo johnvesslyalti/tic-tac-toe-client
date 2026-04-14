@@ -45,7 +45,7 @@ export default function LoginPage() {
         }
       } else {
         console.error("Auth error:", err);
-        setError(err.message || "An authentication error occurred. Please check your credentials.");
+        setError(err instanceof Error ? err.message : "An authentication error occurred. Please check your credentials.");
       }
     } finally {
       setIsSubmitting(false);

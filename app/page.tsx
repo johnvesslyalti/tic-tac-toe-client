@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import client from "@/lib/nakama";
+import client, { getNakamaSocketUrl, nakamaConfig } from "@/lib/nakama";
 import { GameState, OpCode } from "@/types/game";
 import MatchmakingView from "@/components/MatchmakingView";
 import GameBoard from "@/components/GameBoard";
@@ -20,6 +20,8 @@ export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [matchmakerTicket, setMatchmakerTicket] = useState<string | null>(null);
+  const isJoiningMatchRef = useRef(false);
 
   // Auth Guard
   useEffect(() => {
@@ -37,8 +39,25 @@ export default function Home() {
 
   const connectSocket = useCallback(async () => {
     if (!session) return null;
-    const newSocket = client.createSocket(false, false);
-    await newSocket.connect(session, true);
+    const newSocket = client.createSocket(nakamaConfig.useSSL, false);
+
+    try {
+      await newSocket.connect(session, true);
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "isTrusted" in error &&
+        (error as { isTrusted?: boolean }).isTrusted
+      ) {
+        throw new Error(
+          `Could not connect to Nakama WebSocket at ${getNakamaSocketUrl()}. Make sure the Nakama server is running and reachable from the browser.`,
+        );
+      }
+
+      throw error;
+    }
+
     setSocket(newSocket);
     return newSocket;
   }, [session]);
@@ -59,13 +78,41 @@ export default function Home() {
         }
       };
 
-      // Create match via RPC
-      const response = await client.rpc(session!, "create_match", {});
-      const { match_id } = response.payload as { match_id: string };
-      
-      // Join match via Socket
-      await activeSocket.joinMatch(match_id);
-      setMatchId(match_id);
+      // Listen for the matchmaker finding an opponent
+      activeSocket.onmatchmakermatched = async (matched) => {
+        if (isJoiningMatchRef.current) {
+          return;
+        }
+
+        isJoiningMatchRef.current = true;
+        console.log("Matchmaker found a match!", matched);
+        try {
+          const joinedMatch = matched.match_id
+            ? await activeSocket.joinMatch(matched.match_id)
+            : matched.token
+              ? await activeSocket.joinMatch(undefined, matched.token)
+              : null;
+
+          if (!joinedMatch) {
+            throw new Error("Matchmaker response did not include a match target");
+          }
+
+          setMatchId(joinedMatch.match_id);
+          setMatchmakerTicket(null);
+        } catch (e) {
+          isJoiningMatchRef.current = false;
+          console.error("Failed to join match after matchmaking:", e);
+          setView("lobby");
+        }
+      };
+
+      activeSocket.ondisconnect = () => {
+        isJoiningMatchRef.current = false;
+        setMatchmakerTicket(null);
+      };
+
+      const ticket = await activeSocket.addMatchmaker("*", 2, 2);
+      setMatchmakerTicket(ticket.ticket);
     } catch (err: unknown) {
       if (err instanceof Response || (err && typeof err === "object" && "status" in err)) {
         const response = err as Response;
@@ -76,8 +123,11 @@ export default function Home() {
           console.error(`Matchmaking error (API ${response.status}):`, response.statusText);
         }
       } else {
-        console.error("Matchmaking error:", err);
+        console.error("Matchmaking error details:", err instanceof Error ? err.stack || err.message : JSON.stringify(err));
       }
+
+      isJoiningMatchRef.current = false;
+      setMatchmakerTicket(null);
       setView("lobby");
     }
   };
@@ -85,14 +135,24 @@ export default function Home() {
   const handleMove = (index: number) => {
     if (!socket || !matchId) return;
     const data = JSON.stringify({ index });
-    socket.matchDataSend(matchId, OpCode.MOVE, data);
+    socket.sendMatchState(matchId, OpCode.MOVE, data);
   };
 
-  const handleLeave = () => {
-    socket?.disconnect();
+  const handleLeave = async () => {
+    if (socket && matchmakerTicket) {
+      try {
+        await socket.removeMatchmaker(matchmakerTicket);
+      } catch (error) {
+        console.warn("Failed to remove matchmaker ticket during leave:", error);
+      }
+    }
+
+    socket?.disconnect(false);
+    isJoiningMatchRef.current = false;
     setSocket(null);
     setMatchId(null);
     setGameState(null);
+    setMatchmakerTicket(null);
     setView("lobby");
   };
 

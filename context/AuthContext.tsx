@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session } from "@heroiclabs/nakama-js";
-import client from "@/lib/nakama";
 
 interface AuthContextType {
   session: Session | null;
@@ -13,6 +12,55 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+interface AuthSessionPayload {
+  token: string;
+  refresh_token?: string;
+}
+
+function getAuthBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:5000`;
+  }
+
+  return "http://localhost:5000";
+}
+
+async function authenticateViaApi(
+  path: "/auth/login" | "/auth/register",
+  body: Record<string, string>,
+): Promise<Session> {
+  const response = await fetch(`${getAuthBaseUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as
+    | AuthSessionPayload
+    | { error?: string; message?: string };
+
+  if (!response.ok) {
+    throw new Error(
+      ("message" in payload && payload.message) ||
+        ("error" in payload && payload.error) ||
+        `Authentication failed (${response.status})`,
+    );
+  }
+
+  if (!("token" in payload) || !payload.token) {
+    throw new Error("Authentication response did not include a session token");
+  }
+
+  return Session.restore(payload.token, payload.refresh_token || "");
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -30,32 +78,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        let restoredSession = Session.restore(accessToken, refreshToken);
-        
-        // Check if session is expired or close to expiring (within 60 seconds)
+        const restoredSession = Session.restore(accessToken, refreshToken);
+
         if (restoredSession.isexpired(Date.now() / 1000 + 60)) {
-          // Refresh the session
-          restoredSession = await client.sessionRefresh(restoredSession);
-          localStorage.setItem("nakama_access_token", restoredSession.token);
-          localStorage.setItem("nakama_refresh_token", restoredSession.refresh_token || "");
+          throw new Error("Stored session has expired");
         }
-        
+
         setSession(restoredSession);
       } catch (error) {
-        // Handle Nakama Response errors (nakama-js throws Response objects on failure)
-        if (error instanceof Response || (error && typeof error === "object" && "status" in error)) {
-          const response = error as Response;
-          if (response.status === 401) {
-            // Expected if session is gone/expired, no need to log a disruptive error
-            console.debug("Session restoration skipped: Tokens are invalid or expired.");
-          } else {
-            try {
-              const errorData = await response.json().catch(() => ({}));
-              console.error(`Failed to restore session (API ${response.status}):`, errorData.message || errorData);
-            } catch {
-              console.error(`Failed to restore session (API ${response.status}):`, response.statusText);
-            }
-          }
+        if (error instanceof Error) {
+          console.debug("Session restoration skipped:", error.message);
         } else {
           console.error("Failed to restore session (Internal error):", error);
         }
@@ -73,14 +105,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const newSession = await client.authenticateEmail(email, pass, false);
+    const newSession = await authenticateViaApi("/auth/login", {
+      email,
+      password: pass,
+    });
     setSession(newSession);
     localStorage.setItem("nakama_access_token", newSession.token);
     localStorage.setItem("nakama_refresh_token", newSession.refresh_token || "");
   };
 
   const signup = async (email: string, pass: string, username: string) => {
-    const newSession = await client.authenticateEmail(email, pass, true, username);
+    const newSession = await authenticateViaApi("/auth/register", {
+      email,
+      password: pass,
+      username,
+    });
     setSession(newSession);
     localStorage.setItem("nakama_access_token", newSession.token);
     localStorage.setItem("nakama_refresh_token", newSession.refresh_token || "");
