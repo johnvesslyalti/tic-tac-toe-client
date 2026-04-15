@@ -22,6 +22,8 @@ export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [matchmakerTicket, setMatchmakerTicket] = useState<string | null>(null);
   const isJoiningMatchRef = useRef(false);
+  const isMatchmakingClickRef = useRef(false);
+  const socketRef = useRef<Socket | null>(null);
 
   // Auth Guard
   useEffect(() => {
@@ -59,14 +61,22 @@ export default function Home() {
     }
 
     setSocket(newSocket);
+    socketRef.current = newSocket;
     return newSocket;
   }, [session]);
 
   const handleFindMatch = async () => {
+    isMatchmakingClickRef.current = true;
     setView("matchmaking");
     try {
       const activeSocket = await connectSocket();
       if (!activeSocket) throw new Error("Could not connect socket");
+
+      // Abort if the user cancelled while socket was connecting
+      if (!isMatchmakingClickRef.current) {
+        try { activeSocket.disconnect(false); } catch(e) {}
+        return;
+      }
 
       // Set up listeners first
       activeSocket.onmatchdata = (result) => {
@@ -112,6 +122,14 @@ export default function Home() {
       };
 
       const ticket = await activeSocket.addMatchmaker("*", 2, 2);
+      
+      // Abort if user cancelled while matchmaker was being added
+      if (!isMatchmakingClickRef.current) {
+        activeSocket.removeMatchmaker(ticket.ticket).catch(() => {});
+        try { activeSocket.disconnect(false); } catch(e) {}
+        return;
+      }
+
       setMatchmakerTicket(ticket.ticket);
     } catch (err: unknown) {
       if (err instanceof Response || (err && typeof err === "object" && "status" in err)) {
@@ -138,22 +156,37 @@ export default function Home() {
     socket.sendMatchState(matchId, OpCode.MOVE, data);
   };
 
-  const handleLeave = async () => {
-    if (socket && matchmakerTicket) {
-      try {
-        await socket.removeMatchmaker(matchmakerTicket);
-      } catch (error) {
-        console.warn("Failed to remove matchmaker ticket during leave:", error);
-      }
-    }
-
-    socket?.disconnect(false);
+  const handleLeave = () => {
+    isMatchmakingClickRef.current = false;
     isJoiningMatchRef.current = false;
+    
+    // Update the UI immediately for a snappy feel
+    setView("lobby");
+
+    // Capture the current socket and ticket to clean up safely
+    const currentSocket = socketRef.current || socket;
+    const currentTicket = matchmakerTicket;
+
+    // Clear state
     setSocket(null);
+    socketRef.current = null;
     setMatchId(null);
     setGameState(null);
     setMatchmakerTicket(null);
-    setView("lobby");
+
+    // Completely decouple network cleanup from UI
+    if (currentSocket) {
+      if (currentTicket) {
+        currentSocket.removeMatchmaker(currentTicket).catch((error) => {
+          console.warn("Failed to remove matchmaker ticket during leave:", error);
+        });
+      }
+      try { 
+        currentSocket.disconnect(false); 
+      } catch (e) {
+        console.warn("Socket disconnect logic threw an error", e);
+      }
+    }
   };
 
   if (isLoading) {
