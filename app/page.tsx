@@ -8,9 +8,11 @@ import { GameState, OpCode } from "@/types/game";
 import MatchmakingView from "@/components/MatchmakingView";
 import GameBoard from "@/components/GameBoard";
 import ResultsView from "@/components/ResultsView";
+import RoomBrowser from "@/components/RoomBrowser";
+import WaitingRoomView from "@/components/WaitingRoomView";
 import { Socket } from "@heroiclabs/nakama-js";
 
-type ViewState = "lobby" | "matchmaking" | "playing" | "results";
+type ViewState = "lobby" | "matchmaking" | "playing" | "results" | "waiting_room" | "browsing";
 
 export default function Home() {
   const { session, isLoading, logout } = useAuth();
@@ -65,6 +67,53 @@ export default function Home() {
     return newSocket;
   }, [session]);
 
+  const setupMatchListeners = (activeSocket: Socket) => {
+    activeSocket.onmatchdata = (result) => {
+      const payload = JSON.parse(new TextDecoder().decode(result.data));
+      if (result.op_code === OpCode.UPDATE) {
+        setGameState(payload);
+        if (payload.gameStarted) setView("playing");
+        if (payload.winner) setView("results");
+      }
+    };
+  };
+
+  const handleCreateRoom = async () => {
+    setView("waiting_room");
+    try {
+      const response = await client.rpc(session!, "create_match", {});
+      if (!response.payload) throw new Error("No match ID returned");
+      const { match_id } = response.payload as { match_id: string };
+      
+      const activeSocket = await connectSocket();
+      if (!activeSocket) throw new Error("Could not connect socket");
+
+      setupMatchListeners(activeSocket);
+      
+      await activeSocket.joinMatch(match_id);
+      setMatchId(match_id);
+    } catch (err: any) {
+      console.error("Failed to create room:", err.message || err.statusText || err || "Unknown error");
+      setView("lobby");
+    }
+  };
+
+  const handleJoinRoom = async (targetMatchId: string) => {
+    setView("matchmaking"); // generic loading state
+    try {
+      const activeSocket = await connectSocket();
+      if (!activeSocket) throw new Error("Could not connect socket");
+
+      setupMatchListeners(activeSocket);
+
+      await activeSocket.joinMatch(targetMatchId);
+      setMatchId(targetMatchId);
+    } catch (err: any) {
+      console.error("Failed to join room:", err.message || err.statusText || err || "Unknown error");
+      setView("lobby");
+    }
+  };
+
   const handleFindMatch = async () => {
     isMatchmakingClickRef.current = true;
     setView("matchmaking");
@@ -79,14 +128,7 @@ export default function Home() {
       }
 
       // Set up listeners first
-      activeSocket.onmatchdata = (result) => {
-        const payload = JSON.parse(new TextDecoder().decode(result.data));
-        if (result.op_code === OpCode.UPDATE) {
-          setGameState(payload);
-          if (payload.gameStarted) setView("playing");
-          if (payload.winner) setView("results");
-        }
-      };
+      setupMatchListeners(activeSocket);
 
       // Listen for the matchmaker finding an opponent
       activeSocket.onmatchmakermatched = async (matched) => {
@@ -226,11 +268,26 @@ export default function Home() {
             <div className="flex flex-col space-y-4 pt-6">
               <button 
                 onClick={handleFindMatch}
-                className="group relative py-6 bg-teal-game hover:bg-teal-game/90 text-white font-black rounded-2xl shadow-[0_15px_40px_rgba(38,184,163,0.3)] transition-all hover:scale-[1.03] active:scale-95 text-lg uppercase tracking-[0.2em] overflow-hidden"
+                className="group relative py-4 bg-teal-game hover:bg-teal-game/90 text-white font-black rounded-xl shadow-[0_10px_20px_rgba(38,184,163,0.2)] transition-all hover:scale-[1.03] active:scale-95 text-sm uppercase tracking-widest overflow-hidden"
               >
-                <span className="relative z-10">Find Match</span>
+                <span className="relative z-10">Quick Match</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
               </button>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={handleCreateRoom}
+                  className="py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all hover:scale-[1.03] active:scale-95 text-xs border border-white/5 uppercase tracking-wider"
+                >
+                  Create Room
+                </button>
+                <button 
+                  onClick={() => setView("browsing")}
+                  className="py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all hover:scale-[1.03] active:scale-95 text-xs border border-white/5 uppercase tracking-wider"
+                >
+                  Browse Rooms
+                </button>
+              </div>
               
               <button 
                 onClick={logout}
@@ -244,6 +301,21 @@ export default function Home() {
       )}
 
       {view === "matchmaking" && <MatchmakingView onCancel={handleLeave} />}
+
+      {view === "browsing" && (
+        <RoomBrowser 
+          session={session} 
+          onJoin={handleJoinRoom} 
+          onCancel={() => setView("lobby")} 
+        />
+      )}
+
+      {view === "waiting_room" && (
+        <WaitingRoomView 
+          matchId={matchId} 
+          onCancel={handleLeave} 
+        />
+      )}
 
       {view === "playing" && gameState && (
         <GameBoard 
