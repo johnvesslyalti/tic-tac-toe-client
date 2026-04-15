@@ -18,6 +18,9 @@ interface AuthSessionPayload {
   refresh_token?: string;
 }
 
+const ACCESS_TOKEN_KEY = "nakama_access_token";
+const REFRESH_TOKEN_KEY = "nakama_refresh_token";
+
 function getAuthBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
     return process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -69,19 +72,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Restore session from localStorage on mount
   useEffect(() => {
     const restoreSession = async () => {
-      const accessToken = localStorage.getItem("nakama_access_token");
-      const refreshToken = localStorage.getItem("nakama_refresh_token");
+      const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
 
-      if (!accessToken || !refreshToken) {
+      if (!accessToken) {
         setIsLoading(false);
         return;
       }
 
       try {
-        const restoredSession = Session.restore(accessToken, refreshToken);
+        let restoredSession = Session.restore(accessToken, refreshToken ?? "");
 
-        if (restoredSession.isexpired(Date.now() / 1000 + 60)) {
-          throw new Error("Stored session has expired");
+        if (restoredSession.isexpired(Date.now() / 1000 + 5)) {
+          if (restoredSession.refresh_token) {
+            try {
+              const { default: client } = await import("@/lib/nakama");
+              restoredSession = await client.sessionRefresh(restoredSession);
+              localStorage.setItem(ACCESS_TOKEN_KEY, restoredSession.token);
+              if (restoredSession.refresh_token) {
+                localStorage.setItem(REFRESH_TOKEN_KEY, restoredSession.refresh_token);
+              }
+            } catch (err: any) {
+              throw new Error("Stored session expired and refresh failed: " + (err.message || err));
+            }
+          } else {
+            throw new Error("Stored session has expired without a refresh token.");
+          }
         }
 
         setSession(restoredSession);
@@ -93,8 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Clean up invalid tokens
-        localStorage.removeItem("nakama_access_token");
-        localStorage.removeItem("nakama_refresh_token");
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
         setSession(null);
       } finally {
         setIsLoading(false);
@@ -110,8 +126,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password: pass,
     });
     setSession(newSession);
-    localStorage.setItem("nakama_access_token", newSession.token);
-    localStorage.setItem("nakama_refresh_token", newSession.refresh_token || "");
+    localStorage.setItem(ACCESS_TOKEN_KEY, newSession.token);
+    if (newSession.refresh_token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, newSession.refresh_token);
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
   };
 
   const signup = async (email: string, pass: string, username: string) => {
@@ -121,14 +141,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       username,
     });
     setSession(newSession);
-    localStorage.setItem("nakama_access_token", newSession.token);
-    localStorage.setItem("nakama_refresh_token", newSession.refresh_token || "");
+    localStorage.setItem(ACCESS_TOKEN_KEY, newSession.token);
+    if (newSession.refresh_token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, newSession.refresh_token);
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
   };
 
   const logout = () => {
     setSession(null);
-    localStorage.removeItem("nakama_access_token");
-    localStorage.removeItem("nakama_refresh_token");
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   };
 
   return (
