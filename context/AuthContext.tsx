@@ -5,6 +5,7 @@ import { Session } from "@heroiclabs/nakama-js";
 
 interface AuthContextType {
   session: Session | null;
+  setSession: React.Dispatch<React.SetStateAction<Session | null>>;
   isLoading: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, username: string) => Promise<void>;
@@ -186,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ session, setSession, isLoading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

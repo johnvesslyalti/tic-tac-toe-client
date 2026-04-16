@@ -25,7 +25,7 @@ export default function WaitingRoomView({ onCancel, matchId }: WaitingRoomViewPr
           Waiting for opponent...
         </h2>
         <p className="text-white/40 text-sm">
-          Another player can join via the room browser.
+          Share the Room ID below or let them find it in Browse Rooms.
         </p>
       </div>
 

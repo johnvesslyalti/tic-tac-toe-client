@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import client from "@/lib/nakama";
 import { Session } from "@heroiclabs/nakama-js";
 
@@ -23,6 +23,22 @@ export default function RoomBrowser({ session, onJoin, onCancel }: RoomBrowserPr
   const [matches, setMatches] = useState<MatchResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Join by Match ID
+  const [joinIdValue, setJoinIdValue] = useState("");
+  const [joinIdError, setJoinIdError] = useState<string | null>(null);
+  const joinIdInputRef = useRef<HTMLInputElement>(null);
+
+  const handleJoinById = () => {
+    const trimmed = joinIdValue.trim();
+    if (!trimmed) {
+      setJoinIdError("Please enter a Match ID.");
+      joinIdInputRef.current?.focus();
+      return;
+    }
+    setJoinIdError(null);
+    onJoin(trimmed);
+  };
 
   const fetchMatches = useCallback(async () => {
     setLoading(true);
@@ -140,6 +156,36 @@ export default function RoomBrowser({ session, onJoin, onCancel }: RoomBrowserPr
               );
             })}
           </div>
+        )}
+      </div>
+
+      {/* ── Join by Match ID ── */}
+      <div className="mt-5 pt-5 border-t border-white/5">
+        <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-3">Join by Match ID</p>
+        <div className="flex gap-2">
+          <input
+            ref={joinIdInputRef}
+            id="join-match-id-input"
+            type="text"
+            value={joinIdValue}
+            onChange={(e) => {
+              setJoinIdValue(e.target.value);
+              if (joinIdError) setJoinIdError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && handleJoinById()}
+            placeholder="Paste a match ID…"
+            className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-teal-game/60 focus:bg-white/8 transition-colors font-mono"
+          />
+          <button
+            id="join-match-id-btn"
+            onClick={handleJoinById}
+            className="px-5 py-2.5 bg-teal-game hover:bg-teal-game/90 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 whitespace-nowrap"
+          >
+            Join
+          </button>
+        </div>
+        {joinIdError && (
+          <p className="mt-2 text-xs text-red-400">{joinIdError}</p>
         )}
       </div>
     </div>
