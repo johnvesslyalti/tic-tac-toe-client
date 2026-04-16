@@ -5,6 +5,7 @@ import { Session } from "@heroiclabs/nakama-js";
 
 interface AuthContextType {
   session: Session | null;
+  setSession: React.Dispatch<React.SetStateAction<Session | null>>;
   isLoading: boolean;
   login: (email: string, pass: string) => Promise<void>;
   signup: (email: string, pass: string, username: string) => Promise<void>;
@@ -120,6 +121,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     restoreSession();
   }, []);
 
+  // Proactively refresh the token in the background before it expires
+  useEffect(() => {
+    if (!session || !session.expires_at || !session.refresh_token) return;
+
+    // Calculate time until expiration in milliseconds, minus a 30s buffer
+    const expiresInMs = session.expires_at * 1000 - Date.now() - 30000;
+
+    if (expiresInMs <= 0) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const { default: client } = await import("@/lib/nakama");
+        const refreshedSession = await client.sessionRefresh(session);
+        
+        setSession(refreshedSession);
+        localStorage.setItem(ACCESS_TOKEN_KEY, refreshedSession.token);
+        if (refreshedSession.refresh_token) {
+          localStorage.setItem(REFRESH_TOKEN_KEY, refreshedSession.refresh_token);
+        }
+      } catch (error) {
+        console.error("Background token refresh failed:", error);
+        setSession(null);
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+      }
+    }, expiresInMs);
+
+    return () => clearTimeout(timer);
+  }, [session]);
+
   const login = async (email: string, pass: string) => {
     const newSession = await authenticateViaApi("/auth/login", {
       email,
@@ -156,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ session, setSession, isLoading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

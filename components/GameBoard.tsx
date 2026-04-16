@@ -17,7 +17,7 @@ export default function GameBoard({ state, userId, onMove, onLeave }: GameBoardP
   return (
     <div className="fixed inset-0 bg-teal-game flex flex-col items-center justify-center p-6 animate-in fade-in duration-700">
       {/* Turn Indicator */}
-      <div className="absolute top-12 flex flex-col items-center space-y-2 text-white">
+      <div className="flex flex-col items-center space-y-2 text-white mb-12">
          <div className="flex items-center space-x-12">
             <div className={`flex flex-col items-center transition-opacity ${state.currentPlayer === 'X' ? 'opacity-100' : 'opacity-30'}`}>
                 <span className="text-sm font-bold tracking-widest uppercase">X PLAYER</span>
@@ -29,7 +29,7 @@ export default function GameBoard({ state, userId, onMove, onLeave }: GameBoardP
             </div>
          </div>
          
-         <div className="pt-8 flex flex-col items-center">
+         <div className="pt-4 flex flex-col items-center">
             <span className="text-5xl font-light mb-1">
                 {state.currentPlayer}
             </span>
@@ -38,7 +38,7 @@ export default function GameBoard({ state, userId, onMove, onLeave }: GameBoardP
       </div>
 
       {/* Grid */}
-      <div className="relative w-full max-w-[320px] aspect-square grid grid-cols-3 grid-rows-3 mt-12">
+      <div className="relative w-full max-w-[320px] aspect-square grid grid-cols-3 grid-rows-3 mb-12">
         {/* Horizontal Lines */}
         <div className="absolute top-1/3 left-0 right-0 h-[1px] bg-white/20"></div>
         <div className="absolute top-2/3 left-0 right-0 h-[1px] bg-white/20"></div>
