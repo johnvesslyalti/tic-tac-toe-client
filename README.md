@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⭕ Tic-Tac-Toe Multiplayer Client ❌
 
-## Getting Started
+![Banner](./public/banner.png)
 
-First, run the development server:
+A modern, high-performance multiplayer Tic-Tac-Toe frontend built with **Next.js** and **Nakama**. Features a sleek glassmorphic UI, real-time matchmaking, and persistent session management.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Quick Start
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18+)
+- Running [Tic-Tac-Toe API](../tic-tac-toe-api)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Installation
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+2. Configure environment:
+   Create a `.env` file with the following variables:
+   ```env
+   NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+   NEXT_PUBLIC_NAKAMA_HOST=localhost
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. Start development server:
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 🛠️ Tech Stack
+- **Framework**: [Next.js 16](https://nextjs.org/) (App Router)
+- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
+- **Multiplayer**: [Nakama-JS](https://heroiclabs.com/docs/nakama/client-libraries/javascript/)
+- **Icons**: [Lucide React](https://lucide.dev/)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🎮 Features
+- **Real-time Matchmaking**: Find opponents instantly with Nakama's matchmaker.
+- **Custom Rooms**: Create or join matches using unique Match IDs.
+- **Glassmorphic UI**: Premium visual experience with smooth transitions.
+- **Persistent Auth**: Session restoration across page reloads.
+
+---
+
+## 📖 Backend Reference
+This client requires the accompanying backend to function correctly. See the [API README](../tic-tac-toe-api/README.md) for server-side setup instructions.
