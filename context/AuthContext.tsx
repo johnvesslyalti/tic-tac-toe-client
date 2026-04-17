@@ -50,6 +50,7 @@ async function authenticateViaApi(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "x-server-key": process.env.NEXT_PUBLIC_NAKAMA_SERVER_KEY ?? "",
     },
     credentials: "include",
     body: JSON.stringify(body),
