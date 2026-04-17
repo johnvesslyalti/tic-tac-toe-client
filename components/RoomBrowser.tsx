@@ -48,7 +48,19 @@ export default function RoomBrowser({ session, onJoin, onCancel }: RoomBrowserPr
       const response = await client.rpc(session, "list_matches", {});
       if (response.payload) {
         // Handle both snake_case and camelCase just in case
-        const data = response.payload as { matches?: any[] };
+        const data = response.payload as { 
+          matches?: Array<{
+            matchId?: string;
+            match_id?: string;
+            label?: string;
+            size?: number;
+            authoritative?: boolean;
+            tickRate?: number;
+            tick_rate?: number;
+            handlerName?: string;
+            handler_name?: string;
+          }> 
+        };
         const processedMatches = (data.matches || []).map(m => ({
           matchId: m.matchId || m.match_id || "",
           label: m.label || "",
@@ -59,7 +71,7 @@ export default function RoomBrowser({ session, onJoin, onCancel }: RoomBrowserPr
         }));
         setMatches(processedMatches);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to fetch matches:", err);
       setError("Could not load available games.");
     } finally {

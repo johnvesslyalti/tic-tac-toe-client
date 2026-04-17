@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import { AuthProvider } from "@/context/AuthContext";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,16 +13,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#000000",
+};
+
 export const metadata: Metadata = {
   title: "Tic-Tac-Toe Multiplayer",
   description: "A server-authoritative, real-time multiplayer Tic-Tac-Toe game built with Next.js and Nakama.",
   keywords: ["tic-tac-toe", "multiplayer", "nakama", "real-time game", "nextjs"],
   authors: [{ name: "Antigravity Team" }],
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
-  themeColor: "#000000",
 };
-
-import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
   children,

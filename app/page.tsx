@@ -71,7 +71,7 @@ export default function Home() {
         const refreshed = Session.restore(activeSession.token, activeSession.refresh_token);
         setSession(refreshed);
         activeSession = refreshed;
-      } catch (refreshError) {
+      } catch {
         throw new Error("Your session has expired. Please log in again.");
       }
     }
@@ -97,7 +97,7 @@ export default function Home() {
     setSocket(newSocket);
     socketRef.current = newSocket;
     return newSocket;
-  }, [session]);
+  }, [session, setSession]);
 
   const setupMatchListeners = (activeSocket: Socket) => {
     activeSocket.onmatchdata = (result) => {
@@ -124,8 +124,9 @@ export default function Home() {
       
       await activeSocket.joinMatch(match_id);
       setMatchId(match_id);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to create room");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create room";
+      setErrorMessage(message);
       setView("lobby");
       console.error("Failed to create room:", err);
     }
@@ -141,15 +142,16 @@ export default function Home() {
 
       await activeSocket.joinMatch(targetMatchId);
       setMatchId(targetMatchId);
-    } catch (err: any) {
-      const isMatchFull = err.message?.includes("Match already full") || err.message?.includes("match full");
+    } catch (err: unknown) {
+      const error = err as { message?: string }; // Cast for internal property access if needed, or use a safer check
+      const isMatchFull = error.message?.includes("Match already full") || error.message?.includes("match full");
       
       let msg = "Could not join room";
       if (isMatchFull) {
         msg = "This room is already full (max 2 players).";
         console.warn("Join attempt rejected: Match already full");
       } else {
-        msg = err.message || msg;
+        msg = error.message || msg;
         console.error("Failed to join room:", err);
       }
       
@@ -167,7 +169,7 @@ export default function Home() {
 
       // Abort if the user cancelled while socket was connecting
       if (!isMatchmakingClickRef.current) {
-        try { activeSocket.disconnect(false); } catch(e) {}
+        try { activeSocket.disconnect(false); } catch { }
         return;
       }
 
@@ -195,16 +197,17 @@ export default function Home() {
 
           setMatchId(joinedMatch.match_id);
           setMatchmakerTicket(null);
-        } catch (e: any) {
+        } catch (err: unknown) {
           isJoiningMatchRef.current = false;
-          const isMatchFull = e.message?.includes("Match already full") || e.message?.includes("match full");
+          const error = err as { message?: string };
+          const isMatchFull = error.message?.includes("Match already full") || error.message?.includes("match full");
           
           if (isMatchFull) {
             setErrorMessage("This room is already full (max 2 players).");
             console.warn("Matchmaker join rejected: Match already full");
           } else {
-            console.error("Failed to join match after matchmaking:", e);
-            setErrorMessage(e.message || "Failed to join match");
+            console.error("Failed to join match after matchmaking:", err);
+            setErrorMessage(error.message || "Failed to join match");
           }
           setView("lobby");
         }
@@ -220,7 +223,7 @@ export default function Home() {
       // Abort if user cancelled while matchmaker was being added
       if (!isMatchmakingClickRef.current) {
         activeSocket.removeMatchmaker(ticket.ticket).catch(() => {});
-        try { activeSocket.disconnect(false); } catch(e) {}
+        try { activeSocket.disconnect(false); } catch { }
         return;
       }
 

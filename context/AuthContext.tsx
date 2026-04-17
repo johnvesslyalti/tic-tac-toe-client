@@ -102,8 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (restoredSession.refresh_token) {
                 localStorage.setItem(REFRESH_TOKEN_KEY, restoredSession.refresh_token);
               }
-            } catch (err: any) {
-              throw new Error("Stored session expired and refresh failed: " + (err.message || err));
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : String(err);
+              throw new Error("Stored session expired and refresh failed: " + message);
             }
           } else {
             throw new Error("Stored session has expired without a refresh token.");
