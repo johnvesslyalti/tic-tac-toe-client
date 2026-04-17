@@ -21,7 +21,7 @@ A modern, high-performance multiplayer Tic-Tac-Toe frontend built with **Next.js
 2. Configure environment:
    Create a `.env` file with the following variables:
    ```env
-   NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+   NEXT_PUBLIC_API_URL=http://localhost:5000
    NEXT_PUBLIC_NAKAMA_HOST=localhost
    ```
 

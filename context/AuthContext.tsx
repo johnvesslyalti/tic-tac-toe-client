@@ -23,12 +23,20 @@ const ACCESS_TOKEN_KEY = "nakama_access_token";
 const REFRESH_TOKEN_KEY = "nakama_refresh_token";
 
 function getAuthBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
-    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  // Use the explicitly defined API URL from environment variables
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
   }
 
+  // Fallback for development if no env var is set
   if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.hostname}:5000`;
+    // If we're on localhost, assume the dev server is on port 5000
+    if (window.location.hostname === "localhost") {
+      return `http://localhost:5000`;
+    }
+    // In production, we should default to the current origin if no API URL is provided,
+    // as Caddy usually handles routing on the same domain.
+    return window.location.origin;
   }
 
   return "http://localhost:5000";
