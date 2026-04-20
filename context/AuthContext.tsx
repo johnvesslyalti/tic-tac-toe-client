@@ -19,6 +19,18 @@ interface AuthSessionPayload {
   refresh_token?: string;
 }
 
+export class AuthApiError extends Error {
+  status: number;
+  isExpected: boolean;
+
+  constructor(message: string, status: number, isExpected = false) {
+    super(message);
+    this.name = "AuthApiError";
+    this.status = status;
+    this.isExpected = isExpected;
+  }
+}
+
 const ACCESS_TOKEN_KEY = "nakama_access_token";
 const REFRESH_TOKEN_KEY = "nakama_refresh_token";
 
@@ -61,11 +73,21 @@ async function authenticateViaApi(
     | { error?: string; message?: string };
 
   if (!response.ok) {
-    throw new Error(
+    const message =
       ("message" in payload && payload.message) ||
-        ("error" in payload && payload.error) ||
-        `Authentication failed (${response.status})`,
-    );
+      ("error" in payload && payload.error) ||
+      `Authentication failed (${response.status})`;
+
+    const normalizedMessage = message.toLowerCase();
+    const isExpectedAuthFailure =
+      response.status === 401 ||
+      response.status === 404 ||
+      normalizedMessage.includes("user not found") ||
+      normalizedMessage.includes("invalid credential") ||
+      normalizedMessage.includes("invalid email") ||
+      normalizedMessage.includes("invalid password");
+
+    throw new AuthApiError(message, response.status, isExpectedAuthFailure);
   }
 
   if (!("token" in payload) || !payload.token) {

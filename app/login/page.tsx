@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { AuthApiError, useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -31,21 +31,19 @@ export default function LoginPage() {
       }
       router.push("/");
     } catch (err: unknown) {
-      // Handle Nakama Response errors
-      if (err instanceof Response || (err && typeof err === "object" && "status" in err)) {
-        const response = err as Response;
-        try {
-          const errorData = await response.json().catch(() => ({}));
-          const message = errorData.message || `Authentication failed (${response.status})`;
-          console.error(`Auth error (API ${response.status}):`, message);
-          setError(message);
-        } catch {
-          console.error(`Auth error (API ${response.status}):`, response.statusText);
-          setError(`Authentication error: ${response.statusText}`);
+      if (err instanceof AuthApiError) {
+        setError(err.message);
+
+        if (!err.isExpected) {
+          console.error(`Auth error (API ${err.status}):`, err.message);
         }
       } else {
         console.error("Auth error:", err);
-        setError(err instanceof Error ? err.message : "An authentication error occurred. Please check your credentials.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "An authentication error occurred. Please check your credentials.",
+        );
       }
     } finally {
       setIsSubmitting(false);
